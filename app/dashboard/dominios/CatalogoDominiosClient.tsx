@@ -1,104 +1,151 @@
-"use client";
-import { useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { Plus, X, Search, Edit2, Trash2, Layers } from "lucide-react";
-import { DOMINIO_LABELS, DOMINIO_CORES } from "@/lib/utils";
-import { DominioEvolutivo } from "@/types";
+'use client';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { Plus, X, Edit2, Check, Loader2, ChevronDown } from 'lucide-react';
+import { DOMINIOS } from '@/lib/utils';
+import type { DominioTipo } from '@/types';
 
-const DOMINIOS: DominioEvolutivo[] = ["cientifico","estrategico","fisico","social","criativo","mental","financeiro","espiritual"];
-interface Tipo { id: string; nome: string; descricao?: string; dominio: DominioEvolutivo; identificador?: string; }
-
-export default function CatalogoDominiosClient({ tipos }: { tipos: Tipo[] }) {
+export default function CatalogoDominiosClient() {
+  const supabase = createClient();
+  const [tipos, setTipos] = useState<DominioTipo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtroDominio, setFiltroDominio] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string|null>(null);
-  const [search, setSearch] = useState("");
-  const [filtroDominio, setFiltroDominio] = useState<DominioEvolutivo|"">("");
-  const [loading, setLoading] = useState(false);
-  const [, startTransition] = useTransition();
-  const router = useRouter(); const supabase = createClient();
-  const emptyForm = { nome: "", descricao: "", dominio: "mental" as DominioEvolutivo, identificador: "" };
-  const [form, setForm] = useState(emptyForm);
+  const [editId, setEditId] = useState<string|null>(null);
+  const [form, setForm] = useState({ nome: '', descricao: '', dominio: '', identificador: '' });
+  const [saving, setSaving] = useState(false);
 
-  const filtered = tipos.filter(t => {
-    const matchSearch = t.nome.toLowerCase().includes(search.toLowerCase());
-    const matchDominio = filtroDominio === "" || t.dominio === filtroDominio;
-    return matchSearch && matchDominio;
-  });
+  useEffect(() => { fetchTipos(); }, []);
 
-  function startEdit(t: Tipo) { setForm({ nome:t.nome, descricao:t.descricao||"", dominio:t.dominio, identificador:t.identificador||"" }); setEditingId(t.id); setShowForm(true); }
-  function resetForm() { setForm(emptyForm); setEditingId(null); setShowForm(false); }
+  async function fetchTipos() {
+    setLoading(true);
+    const { data } = await supabase.from('dominio_tipos').select('*').order('dominio').order('nome');
+    setTipos(data || []);
+    setLoading(false);
+  }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const payload = { ...form, identificador: form.identificador || form.nome.toLowerCase().replace(/s+/g,"-") };
-    if (editingId) { await supabase.from("dominio_tipos").update(payload).eq("id", editingId); }
-    else { await supabase.from("dominio_tipos").insert({ ...payload, user_id: user!.id }); }
-    resetForm(); startTransition(() => router.refresh()); setLoading(false);
+  async function handleSave() {
+    if (!form.nome.trim() || !form.dominio) return;
+    setSaving(true);
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) return;
+    const identificador = form.identificador || form.nome.toLowerCase().replace(/\s+/g,'-');
+    if (editId) {
+      await supabase.from('dominio_tipos').update({ nome: form.nome, descricao: form.descricao, dominio: form.dominio, identificador, updated_at: new Date().toISOString() }).eq('id', editId);
+      setEditId(null);
+    } else {
+      await supabase.from('dominio_tipos').insert({ user_id: user.user.id, nome: form.nome, descricao: form.descricao, dominio: form.dominio, identificador });
+    }
+    setForm({ nome:'', descricao:'', dominio:'', identificador:'' });
+    setShowForm(false); setSaving(false);
+    fetchTipos();
+  }
+
+  function startEdit(t: DominioTipo) {
+    setEditId(t.id);
+    setForm({ nome: t.nome, descricao: t.descricao||'', dominio: t.dominio, identificador: t.identificador });
+    setShowForm(true);
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("dominio_tipos").delete().eq("id", id);
-    startTransition(() => router.refresh());
+    await supabase.from('dominio_tipos').delete().eq('id', id);
+    fetchTipos();
   }
 
-  const grouped = DOMINIOS.reduce((acc, d) => { acc[d] = filtered.filter(t => t.dominio === d); return acc; }, {} as Record<DominioEvolutivo, Tipo[]>);
+  const dominioLabel = (val: string) => DOMINIOS.find(d => d.value === val)?.label || val;
+  const filtrados = filtroDominio ? tipos.filter(t => t.dominio === filtroDominio) : tipos;
+  const porDominio = filtrados.reduce((acc, t) => {
+    if (!acc[t.dominio]) acc[t.dominio] = [];
+    acc[t.dominio].push(t);
+    return acc;
+  }, {} as Record<string, DominioTipo[]>);
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto page-enter">
-      <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Layers size={18} className="text-violet-400"/>Tipos de Domínio</h1><p className="text-zinc-500 text-sm mt-0.5">{tipos.length} tipos cadastrados</p></div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-1.5"><Plus size={15}/>Novo tipo</button>
-      </div>
-
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"/><input className="input pl-9" placeholder="Buscar tipo..." value={search} onChange={e => setSearch(e.target.value)}/></div>
-        <select className="select w-auto min-w-[140px]" value={filtroDominio} onChange={e => setFiltroDominio(e.target.value as DominioEvolutivo|"")}>
-          <option value="">Todos os domínios</option>
-          {DOMINIOS.map(d => <option key={d} value={d}>{DOMINIO_LABELS[d]}</option>)}
-        </select>
-      </div>
-
-      {filtered.length === 0 && <div className="card p-10 text-center"><Layers size={32} className="text-zinc-700 mx-auto mb-3"/><p className="text-zinc-500">Nenhum tipo encontrado.</p><button onClick={() => setShowForm(true)} className="btn-primary mt-4 inline-flex items-center gap-1.5"><Plus size={14}/>Criar primeiro tipo</button></div>}
-
-      <div className="space-y-6">
-        {DOMINIOS.map(d => grouped[d].length > 0 && (
-          <div key={d}>
-            <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${DOMINIO_CORES[d]}`}>{DOMINIO_LABELS[d]}</p>
-            <div className="grid gap-2 md:grid-cols-2">
-              {grouped[d].map(t => (
-                <div key={t.id} className="card-hover p-4 group">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-zinc-200">{t.nome}</p>
-                      {t.identificador && <p className="text-xs text-zinc-700 font-mono mt-0.5">{t.identificador}</p>}
-                      {t.descricao && <p className="text-xs text-zinc-600 mt-1 line-clamp-2">{t.descricao}</p>}
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-                      <button onClick={() => startEdit(t)} className="btn-ghost p-1.5"><Edit2 size={12}/></button>
-                      <button onClick={() => handleDelete(t.id)} className="btn-ghost p-1.5 hover:text-rose-400"><Trash2 size={12}/></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Tipos de Domínio</h1>
+          <p className="text-white/50 text-sm mt-1">Gerencie os tipos de domínio do Darwin</p>
+        </div>
+        <button onClick={() => { setShowForm(!showForm); setEditId(null); setForm({nome:'',descricao:'',dominio:'',identificador:''}); }}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+          <Plus size={16} /> Novo tipo
+        </button>
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="card w-full max-w-md animate-slide-up">
-            <div className="flex items-center justify-between p-5 border-b border-[rgba(99,113,242,0.1)]"><h2 className="text-sm font-semibold text-white">{editingId?"Editar tipo":"Novo tipo de domínio"}</h2><button onClick={resetForm} className="btn-ghost p-1"><X size={16}/></button></div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div><label className="label">Nome *</label><input className="input" placeholder="Ex: Foco, Comunicação..." required value={form.nome} onChange={e => setForm({...form,nome:e.target.value})}/></div>
-              <div><label className="label">Domínio relacionado</label><select className="select" value={form.dominio} onChange={e => setForm({...form,dominio:e.target.value as DominioEvolutivo})}>{DOMINIOS.map(d=><option key={d} value={d}>{DOMINIO_LABELS[d]}</option>)}</select></div>
-              <div><label className="label">Identificador interno</label><input className="input font-mono" placeholder="foco, comunicacao..." value={form.identificador} onChange={e => setForm({...form,identificador:e.target.value})}/></div>
-              <div><label className="label">Descrição</label><textarea className="input min-h-[70px] resize-none" placeholder="Descreva este tipo de domínio..." value={form.descricao} onChange={e => setForm({...form,descricao:e.target.value})}/></div>
-              <div className="flex gap-2 pt-2"><button type="button" onClick={resetForm} className="btn-secondary flex-1">Cancelar</button><button type="submit" disabled={loading} className="btn-primary flex-1 disabled:opacity-50">{loading?"Salvando...":editingId?"Salvar":"Criar"}</button></div>
-            </form>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-white">{editId ? 'Editar' : 'Novo'} tipo de domínio</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <input value={form.nome} onChange={e => setForm(p=>({...p,nome:e.target.value}))}
+              placeholder="Nome do tipo *" className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-blue-500" />
+            <select value={form.dominio} onChange={e => setForm(p=>({...p,dominio:e.target.value}))}
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500">
+              <option value="">Selecionar domínio *</option>
+              {DOMINIOS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+            <input value={form.identificador} onChange={e => setForm(p=>({...p,identificador:e.target.value}))}
+              placeholder="Identificador (auto-gerado)" className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-blue-500" />
+            <textarea value={form.descricao} onChange={e => setForm(p=>({...p,descricao:e.target.value}))}
+              placeholder="Descrição (opcional)" rows={1}
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-blue-500 resize-none" />
           </div>
+          <div className="flex gap-3">
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button onClick={() => { setShowForm(false); setEditId(null); }}
+              className="px-4 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm transition-colors">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setFiltroDominio('')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!filtroDominio ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
+          Todos
+        </button>
+        {DOMINIOS.map(d => (
+          <button key={d.value} onClick={() => setFiltroDominio(d.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filtroDominio===d.value ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-blue-500" size={24} /></div>
+      ) : Object.keys(porDominio).length === 0 ? (
+        <div className="text-center py-12 text-white/30">
+          <p>Nenhum tipo cadastrado ainda</p>
+          <p className="text-sm mt-1">Clique em &quot;Novo tipo&quot; para começar</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(porDominio).map(([dom, itens]) => (
+            <div key={dom}>
+              <h3 className="text-sm font-semibold text-white/60 mb-3">{dominioLabel(dom)}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {itens.map(t => (
+                  <div key={t.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors group">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-white text-sm">{t.nome}</p>
+                        <p className="text-white/30 text-xs mt-0.5 font-mono">{t.identificador}</p>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEdit(t)} className="p-1 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-colors"><Edit2 size={13} /></button>
+                        <button onClick={() => handleDelete(t.id)} className="p-1 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-colors"><X size={13} /></button>
+                      </div>
+                    </div>
+                    {t.descricao && <p className="text-white/40 text-xs mt-2 line-clamp-2">{t.descricao}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
