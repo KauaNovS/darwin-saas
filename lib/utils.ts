@@ -1,15 +1,39 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { EventoTipo, DominioEvolutivo, ProjetoStatus } from "@/types";
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
-export const TIPO_EVENTO_LABELS: Record<EventoTipo, string> = { emocional:"Emocional",social:"Social",cognitivo:"Cognitivo",operacional:"Operacional",biologico:"Biológico",financeiro:"Financeiro" };
-export const TIPO_EVENTO_CORES: Record<EventoTipo, string> = { emocional:"bg-rose-500/20 text-rose-300 border-rose-500/30",social:"bg-sky-500/20 text-sky-300 border-sky-500/30",cognitivo:"bg-violet-500/20 text-violet-300 border-violet-500/30",operacional:"bg-amber-500/20 text-amber-300 border-amber-500/30",biologico:"bg-emerald-500/20 text-emerald-300 border-emerald-500/30",financeiro:"bg-yellow-500/20 text-yellow-300 border-yellow-500/30" };
-export const DOMINIO_LABELS: Record<DominioEvolutivo, string> = { cientifico:"Científico",estrategico:"Estratégico",fisico:"Físico",social:"Social",criativo:"Criativo",mental:"Mental",financeiro:"Financeiro",espiritual:"Espiritual" };
-export const DOMINIO_CORES: Record<DominioEvolutivo, string> = { cientifico:"text-blue-400",estrategico:"text-violet-400",fisico:"text-emerald-400",social:"text-sky-400",criativo:"text-pink-400",mental:"text-purple-400",financeiro:"text-yellow-400",espiritual:"text-teal-400" };
-export const DOMINIO_BG: Record<DominioEvolutivo, string> = { cientifico:"bg-blue-500",estrategico:"bg-violet-500",fisico:"bg-emerald-500",social:"bg-sky-500",criativo:"bg-pink-500",mental:"bg-purple-500",financeiro:"bg-yellow-500",espiritual:"bg-teal-500" };
-export const PROJETO_STATUS_LABELS: Record<ProjetoStatus, string> = { ativo:"Ativo",pausado:"Pausado",concluido:"Concluído",arquivado:"Arquivado" };
-export const PROJETO_STATUS_CORES: Record<ProjetoStatus, string> = { ativo:"bg-emerald-500/20 text-emerald-300 border-emerald-500/30",pausado:"bg-amber-500/20 text-amber-300 border-amber-500/30",concluido:"bg-blue-500/20 text-blue-300 border-blue-500/30",arquivado:"bg-zinc-500/20 text-zinc-400 border-zinc-500/30" };
-export const EMOCOES_DEFAULT = ["ansiedade","calma","motivação","frustração","alegria","tristeza","raiva","orgulho","medo","esperança","entusiasmo","cansaço","satisfação","insegurança","gratidão","euforia","melancolia","curiosidade","confiança","vergonha"];
-export const DOMINIO_TIPOS_DEFAULT: Record<DominioEvolutivo, string[]> = { cientifico:["Pesquisa","Aprendizado","Análise","Experimento"],estrategico:["Planejamento","Liderança","Decisão","Estratégia"],fisico:["Energia Corporal","Exercício","Saúde","Descanso"],social:["Comunicação","Relacionamento","Empatia","Networking"],criativo:["Criatividade","Inovação","Arte","Expressão"],mental:["Foco","Clareza","Memória","Concentração"],financeiro:["Investimento","Gestão","Economia","Renda"],espiritual:["Meditação","Propósito","Valores","Gratidão"] };
-export const PROJETO_CORES = ["#6371f2","#f26371","#71f263","#f2c463","#63c4f2","#c463f2","#f26363","#63f2c4","#f2a363","#6394f2"];
-export function getIntensityColor(v: number): string { if (v <= 3) return "#ef4444"; if (v <= 6) return "#f59e0b"; return "#22c55e"; }
+
+export function getIntensityColor(v: number): string {
+  if (v <= 3) return '#ef4444';
+  if (v <= 6) return '#f59e0b';
+  return '#22c55e';
+}
+
+export const EMOCOES_DEFAULT = [
+  'Alegria','Gratidão','Motivação','Amor','Esperança','Serenidade',
+  'Curiosidade','Entusiasmo','Confiança','Satisfação',
+  'Tristeza','Ansiedade','Raiva','Medo','Frustração','Culpa',
+  'Vergonha','Solidão','Inveja','Tédio','Confusão','Desânimo'
+];
+
+export const DOMINIO_TIPOS_DEFAULT: Record<string, string[]> = {
+  cientifico: ['Análise','Pesquisa','Experimentação','Raciocínio Lógico'],
+  estrategico: ['Planejamento','Tomada de Decisão','Liderança','Estratégia'],
+  fisico: ['Energia Corporal','Exercício','Saúde','Recuperação'],
+  social: ['Comunicação','Relacionamento','Empatia','Colaboração'],
+  criativo: ['Criatividade','Inovação','Expressão Artística','Design'],
+  mental: ['Foco','Clareza Mental','Aprendizado','Memória'],
+  financeiro: ['Gestão Financeira','Investimento','Economia','Produtividade'],
+  espiritual: ['Meditação','Propósito','Valores','Consciência'],
+};
+
+export const DOMINIOS = [
+  { value: 'cientifico', label: '🔬 Científico' },
+  { value: 'estrategico', label: '🎯 Estratégico' },
+  { value: 'fisico', label: '💪 Físico' },
+  { value: 'social', label: '👥 Social' },
+  { value: 'criativo', label: '🎨 Criativo' },
+  { value: 'mental', label: '🧠 Mental' },
+  { value: 'financeiro', label: '💰 Financeiro' },
+  { value: 'espiritual', label: '✨ Espiritual' },
+];
