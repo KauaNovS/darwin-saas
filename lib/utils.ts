@@ -37,3 +37,11 @@ export const DOMINIOS = [
   { value: 'financeiro', label: '💰 Financeiro' },
   { value: 'espiritual', label: '✨ Espiritual' },
 ];
+
+export const PROJETO_CORES = [
+  '#6e56ff','#ec4899','#22c55e','#f59e0b','#3b82f6',
+  '#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'
+];
+
+export type ProjetoStatus = 'ativo' | 'pausado' | 'concluido' | 'arquivado';
+export type DominioEvolutivo = 'cientifico' | 'estrategico' | 'fisico' | 'social' | 'criativo' | 'mental' | 'financeiro' | 'espiritual';
