@@ -38,10 +38,35 @@ export const DOMINIOS = [
   { value: 'espiritual', label: '✨ Espiritual' },
 ];
 
+export const DOMINIO_LABELS: Record<string, string> = {
+  cientifico: '🔬 Científico',
+  estrategico: '🎯 Estratégico',
+  fisico: '💪 Físico',
+  social: '👥 Social',
+  criativo: '🎨 Criativo',
+  mental: '🧠 Mental',
+  financeiro: '💰 Financeiro',
+  espiritual: '✨ Espiritual',
+};
+
 export const PROJETO_CORES = [
   '#6e56ff','#ec4899','#22c55e','#f59e0b','#3b82f6',
   '#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'
 ];
+
+export const PROJETO_STATUS_LABELS: Record<string, string> = {
+  ativo: 'Ativo',
+  pausado: 'Pausado',
+  concluido: 'Concluído',
+  arquivado: 'Arquivado',
+};
+
+export const PROJETO_STATUS_CORES: Record<string, string> = {
+  ativo: '#22c55e',
+  pausado: '#f59e0b',
+  concluido: '#6e56ff',
+  arquivado: '#5a5d70',
+};
 
 export type ProjetoStatus = 'ativo' | 'pausado' | 'concluido' | 'arquivado';
 export type DominioEvolutivo = 'cientifico' | 'estrategico' | 'fisico' | 'social' | 'criativo' | 'mental' | 'financeiro' | 'espiritual';
