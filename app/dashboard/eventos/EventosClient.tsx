@@ -1,210 +1,342 @@
-"use client";
-import { useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { Plus, X, Zap, Filter, Trash2, ChevronDown } from "lucide-react";
-import { TIPO_EVENTO_LABELS, TIPO_EVENTO_CORES, EMOCOES_DEFAULT, DOMINIO_LABELS, DOMINIO_TIPOS_DEFAULT, cn, getIntensityColor } from "@/lib/utils";
-import { Evento, EventoTipo, DominioEvolutivo, EmocaoItem, DominioItem } from "@/types";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+'use client';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { Plus, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { cn, getIntensityColor, EMOCOES_DEFAULT, DOMINIOS, DOMINIO_TIPOS_DEFAULT } from '@/lib/utils';
+import type { Evento, EmocaoItem, DominioItem } from '@/types';
 
-const TIPOS: EventoTipo[] = ["emocional","social","cognitivo","operacional","biologico","financeiro"];
-const DOMINIOS: DominioEvolutivo[] = ["cientifico","estrategico","fisico","social","criativo","mental","financeiro","espiritual"];
-interface ProjetoSimples { id:string; nome:string; cor?:string|null; }
+const TIPOS_EVENTO = ['emocional','social','cognitivo','operacional','biologico','financeiro'];
 
-export default function EventosClient({ eventos, projetos }: { eventos:Evento[]; projetos:ProjetoSimples[]; }) {
-  const [showForm,setShowForm]=useState(false);
-  const [filtroTipo,setFiltroTipo]=useState<EventoTipo|"">("");
-  const [loading,setLoading]=useState(false);
-  const [,startTransition]=useTransition();
-  const router=useRouter(); const supabase=createClient();
+function IntensityBar({ value, color }: { value: number; color: string }) {
+  return (
+    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+      <div className="h-full rounded-full transition-all duration-300" style={{ width: `${(value/10)*100}%`, backgroundColor: color }} />
+    </div>
+  );
+}
 
-  const [form,setForm]=useState({
-    titulo:"",descricao:"",tipo:"emocional" as EventoTipo,energia:5,local:"",projeto_id:"",
+function EmocaoCard({ item, idx, onChange, onRemove, catalogoEmocoes }: {
+  item: EmocaoItem; idx: number;
+  onChange: (idx: number, field: keyof EmocaoItem, val: string | number) => void;
+  onRemove: (idx: number) => void;
+  catalogoEmocoes: string[];
+}) {
+  const color = getIntensityColor(item.intensidade);
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <select value={item.emocao_nome} onChange={e => onChange(idx,'emocao_nome',e.target.value)}
+          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500">
+          <option value="">Selecionar emoção...</option>
+          {catalogoEmocoes.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+        <button onClick={() => onRemove(idx)} className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-white/50">Intensidade</span>
+          <span style={{ color }} className="font-bold">{item.intensidade}/10</span>
+        </div>
+        <IntensityBar value={item.intensidade} color={color} />
+        <input type="range" min={1} max={10} value={item.intensidade}
+          onChange={e => onChange(idx,'intensidade',parseInt(e.target.value))}
+          className="w-full h-1 appearance-none cursor-pointer" />
+      </div>
+      <input value={item.observacao||''} onChange={e => onChange(idx,'observacao',e.target.value)}
+        placeholder="Observação opcional..." className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500" />
+    </div>
+  );
+}
+
+function DominioCard({ item, idx, onChange, onRemove, tiposPorDominio }: {
+  item: DominioItem; idx: number;
+  onChange: (idx: number, field: keyof DominioItem, val: string | number) => void;
+  onRemove: (idx: number) => void;
+  tiposPorDominio: Record<string, string[]>;
+}) {
+  const color = getIntensityColor(item.intensidade);
+  const tipos = item.dominio ? (tiposPorDominio[item.dominio] || []) : [];
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <select value={item.dominio} onChange={e => { onChange(idx,'dominio',e.target.value); onChange(idx,'tipo_nome',''); }}
+          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500">
+          <option value="">Selecionar domínio...</option>
+          {DOMINIOS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+        <button onClick={() => onRemove(idx)} className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors">
+          <X size={14} />
+        </button>
+      </div>
+      {item.dominio && (
+        <select value={item.tipo_nome||''} onChange={e => onChange(idx,'tipo_nome',e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500">
+          <option value="">Selecionar tipo...</option>
+          {tipos.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      )}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-white/50">Intensidade</span>
+          <span style={{ color }} className="font-bold">{item.intensidade}/10</span>
+        </div>
+        <IntensityBar value={item.intensidade} color={color} />
+        <input type="range" min={1} max={10} value={item.intensidade}
+          onChange={e => onChange(idx,'intensidade',parseInt(e.target.value))}
+          className="w-full h-1 appearance-none cursor-pointer" />
+      </div>
+      <input value={item.descricao||''} onChange={e => onChange(idx,'descricao',e.target.value)}
+        placeholder="Descrição opcional..." className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500" />
+    </div>
+  );
+}
+
+export default function EventosClient() {
+  const supabase = createClient();
+  const [eventos, setEventos] = useState<Evento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [catalogoEmocoes, setCatalogoEmocoes] = useState<string[]>(EMOCOES_DEFAULT);
+  const [tiposPorDominio, setTiposPorDominio] = useState<Record<string,string[]>>(DOMINIO_TIPOS_DEFAULT);
+
+  const [form, setForm] = useState({
+    titulo: '', descricao: '', tipo: 'emocional', energia: 5, local: '', projeto_id: '', tags: ''
   });
-  const [emocoes,setEmocoes]=useState<EmocaoItem[]>([]);
-  const [dominios,setDominios]=useState<DominioItem[]>([]);
+  const [emocoes, setEmocoes] = useState<EmocaoItem[]>([]);
+  const [dominios, setDominios] = useState<DominioItem[]>([]);
 
-  const eventosFiltrados=filtroTipo?eventos.filter(e=>e.tipo===filtroTipo):eventos;
+  useEffect(() => { fetchEventos(); fetchCatalogos(); }, []);
 
-  function resetForm(){
-    setForm({titulo:"",descricao:"",tipo:"emocional",energia:5,local:"",projeto_id:""});
-    setEmocoes([]); setDominios([]); setShowForm(false);
+  async function fetchCatalogos() {
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) return;
+    const { data: emoData } = await supabase.from('emocoes_catalogo').select('nome').eq('user_id', user.user.id);
+    if (emoData && emoData.length > 0) {
+      const extras = emoData.map((e: { nome: string }) => e.nome).filter((n: string) => !EMOCOES_DEFAULT.includes(n));
+      setCatalogoEmocoes([...EMOCOES_DEFAULT, ...extras]);
+    }
+    const { data: tiposData } = await supabase.from('dominio_tipos').select('nome,dominio').eq('user_id', user.user.id);
+    if (tiposData && tiposData.length > 0) {
+      const extra: Record<string,string[]> = { ...DOMINIO_TIPOS_DEFAULT };
+      tiposData.forEach((t: { nome: string; dominio: string }) => {
+        if (!extra[t.dominio]) extra[t.dominio] = [];
+        if (!extra[t.dominio].includes(t.nome)) extra[t.dominio].push(t.nome);
+      });
+      setTiposPorDominio(extra);
+    }
   }
 
-  function addEmocao(){setEmocoes(prev=>[...prev,{emocao_nome:"",intensidade:5,observacao:""}]);}
-  function updateEmocao(i:number,field:keyof EmocaoItem,val:string|number){setEmocoes(prev=>prev.map((e,idx)=>idx===i?{...e,[field]:val}:e));}
-  function removeEmocao(i:number){setEmocoes(prev=>prev.filter((_,idx)=>idx!==i));}
-
-  function addDominio(){setDominios(prev=>[...prev,{dominio:"mental" as DominioEvolutivo,tipo_nome:"",intensidade:5,descricao:""}]);}
-  function updateDominio(i:number,field:keyof DominioItem,val:string|number){setDominios(prev=>prev.map((d,idx)=>idx===i?{...d,[field]:val}:d));}
-  function removeDominio(i:number){setDominios(prev=>prev.filter((_,idx)=>idx!==i));}
-
-  async function handleCreate(e:React.FormEvent){
-    e.preventDefault(); setLoading(true);
-    const {data:{user}}=await supabase.auth.getUser();
-    const {data:evento,error}=await supabase.from("eventos").insert({
-      ...form, user_id:user!.id,
-      projeto_id:form.projeto_id||null, local:form.local||null, descricao:form.descricao||null,
-      emocao: emocoes.length>0?emocoes.map(e=>e.emocao_nome).join(", "):null,
-    }).select().single();
-    if(!error && evento){
-      if(emocoes.length>0){
-        await supabase.from("evento_emocoes").insert(emocoes.filter(e=>e.emocao_nome).map(e=>({...e,evento_id:evento.id,user_id:user!.id})));
-      }
-      if(dominios.length>0){
-        await supabase.from("evento_dominios").insert(dominios.map(d=>({...d,evento_id:evento.id,user_id:user!.id})));
-      }
-      resetForm(); startTransition(()=>router.refresh());
-    }
+  async function fetchEventos() {
+    setLoading(true);
+    const { data } = await supabase.from('eventos').select('*').order('created_at', { ascending: false });
+    setEventos(data || []);
     setLoading(false);
   }
 
-  async function handleDelete(id:string){
-    await supabase.from("evento_emocoes").delete().eq("evento_id",id);
-    await supabase.from("evento_dominios").delete().eq("evento_id",id);
-    await supabase.from("eventos").delete().eq("id",id);
-    startTransition(()=>router.refresh());
+  function addEmocao() { setEmocoes(prev => [...prev, { emocao_nome: '', intensidade: 5, observacao: '' }]); }
+  function removeEmocao(idx: number) { setEmocoes(prev => prev.filter((_,i) => i !== idx)); }
+  function changeEmocao(idx: number, field: keyof EmocaoItem, val: string | number) {
+    setEmocoes(prev => prev.map((e, i) => i === idx ? { ...e, [field]: val } : e));
+  }
+  function addDominio() { setDominios(prev => [...prev, { dominio: '', tipo_nome: '', intensidade: 5, descricao: '' }]); }
+  function removeDominio(idx: number) { setDominios(prev => prev.filter((_,i) => i !== idx)); }
+  function changeDominio(idx: number, field: keyof DominioItem, val: string | number) {
+    setDominios(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+
+    const { data: evento, error } = await supabase.from('eventos').insert({
+      user_id: userData.user.id,
+      titulo: form.titulo, descricao: form.descricao, tipo: form.tipo,
+      energia: form.energia, local: form.local,
+      projeto_id: form.projeto_id || null,
+      emocao: emocoes[0]?.emocao_nome || null,
+      dominio: dominios[0]?.dominio || null,
+      tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+    }).select().single();
+
+    if (!error && evento) {
+      if (emocoes.length > 0) {
+        const emocoesValidas = emocoes.filter(e => e.emocao_nome);
+        if (emocoesValidas.length > 0) {
+          await supabase.from('evento_emocoes').insert(
+            emocoesValidas.map(e => ({ evento_id: evento.id, user_id: userData.user!.id, ...e }))
+          );
+        }
+      }
+      if (dominios.length > 0) {
+        const dominiosValidos = dominios.filter(d => d.dominio);
+        if (dominiosValidos.length > 0) {
+          await supabase.from('evento_dominios').insert(
+            dominiosValidos.map(d => ({ evento_id: evento.id, user_id: userData.user!.id, ...d }))
+          );
+        }
+      }
+    }
+
+    setSaving(false);
+    setShowForm(false);
+    setForm({ titulo: '', descricao: '', tipo: 'emocional', energia: 5, local: '', projeto_id: '', tags: '' });
+    setEmocoes([]); setDominios([]);
+    fetchEventos();
+  }
+
+  async function deleteEvento(id: string) {
+    await supabase.from('evento_emocoes').delete().eq('evento_id', id);
+    await supabase.from('evento_dominios').delete().eq('evento_id', id);
+    await supabase.from('eventos').delete().eq('id', id);
+    fetchEventos();
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto page-enter">
-      <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Zap size={18} className="text-darwin-400"/>Eventos</h1><p className="text-zinc-500 text-sm mt-0.5">{eventos.length} registros</p></div>
-        <button onClick={()=>setShowForm(true)} className="btn-primary flex items-center gap-1.5"><Plus size={15}/>Novo evento</button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Eventos</h1>
+          <p className="text-white/50 text-sm mt-1">Registre seus eventos contextuais</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+          <Plus size={16} />
+          {showForm ? 'Cancelar' : 'Novo evento'}
+        </button>
       </div>
 
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
-        <Filter size={13} className="text-zinc-600"/>
-        <button onClick={()=>setFiltroTipo("")} className={cn("badge border cursor-pointer text-xs px-2.5 py-1",filtroTipo===""?"bg-darwin-600/20 text-darwin-300 border-darwin-500/30":"bg-transparent text-zinc-600 border-zinc-700")}>Todos</button>
-        {TIPOS.map(t=>(<button key={t} onClick={()=>setFiltroTipo(filtroTipo===t?"":t)} className={cn("badge border cursor-pointer text-xs px-2.5 py-1",filtroTipo===t?TIPO_EVENTO_CORES[t]:"bg-transparent text-zinc-600 border-zinc-700")}>{TIPO_EVENTO_LABELS[t]}</button>))}
-      </div>
+      {showForm && (
+        <form onSubmit={handleSubmit} className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-6">
+          <h2 className="text-lg font-semibold text-white">Registrar evento</h2>
 
-      <div className="space-y-2">
-        {eventosFiltrados.length===0&&<div className="card p-10 text-center"><Zap size={32} className="text-zinc-700 mx-auto mb-3"/><p className="text-zinc-500">Nenhum evento encontrado.</p><button onClick={()=>setShowForm(true)} className="btn-primary mt-4 inline-flex items-center gap-1.5"><Plus size={14}/>Registrar evento</button></div>}
-        {eventosFiltrados.map(ev=>{
-          const proj=projetos.find(p=>p.id===ev.projeto_id);
-          return(<div key={ev.id} className="card-hover p-4 group"><div className="flex items-start gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-darwin-500 mt-2 flex-shrink-0"/>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-zinc-200">{ev.titulo}</p>
-                <button onClick={()=>handleDelete(ev.id)} className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-rose-400 transition-all"><Trash2 size={13}/></button>
-              </div>
-              {ev.descricao&&<p className="text-xs text-zinc-600 mt-0.5 line-clamp-2">{ev.descricao}</p>}
-              <div className="flex items-center gap-2 flex-wrap mt-2">
-                <span className={cn("badge text-xs",TIPO_EVENTO_CORES[ev.tipo])}>{TIPO_EVENTO_LABELS[ev.tipo]}</span>
-                {ev.emocao&&<span className="text-xs text-zinc-600 bg-zinc-800/50 px-2 py-0.5 rounded-full">{ev.emocao}</span>}
-                {ev.energia!==undefined&&<span className="text-xs text-zinc-600">⚡ {ev.energia}/10</span>}
-                {proj&&<span className="flex items-center gap-1 text-xs text-zinc-600"><span className="w-1.5 h-1.5 rounded-full inline-block" style={{backgroundColor:proj.cor??"#6371f2"}}/>{proj.nome}</span>}
-                <span className="text-xs text-zinc-700 ml-auto">{format(new Date(ev.created_at),"dd MMM, HH:mm",{locale:ptBR})}</span>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="text-xs text-white/50 mb-1 block">Título *</label>
+              <input required value={form.titulo} onChange={e => setForm(p => ({...p, titulo: e.target.value}))}
+                placeholder="O que aconteceu?" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500" />
             </div>
-          </div></div>);
-        })}
-      </div>
-
-      {showForm&&(
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="card w-full max-w-2xl max-h-[92vh] overflow-y-auto animate-slide-up">
-            <div className="flex items-center justify-between p-5 border-b border-[rgba(99,113,242,0.1)]">
-              <h2 className="text-sm font-semibold text-white">Novo evento</h2>
-              <button onClick={resetForm} className="btn-ghost p-1"><X size={16}/></button>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Tipo</label>
+              <select value={form.tipo} onChange={e => setForm(p => ({...p, tipo: e.target.value}))}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-purple-500">
+                {TIPOS_EVENTO.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+              </select>
             </div>
-            <form onSubmit={handleCreate} className="p-5 space-y-5">
-              {/* Básico */}
-              <div><label className="label">Título *</label><input className="input" placeholder="O que aconteceu?" required value={form.titulo} onChange={e=>setForm({...form,titulo:e.target.value})}/></div>
-              <div><label className="label">Descrição</label><textarea className="input min-h-[70px] resize-none" placeholder="Descreva o contexto..." value={form.descricao} onChange={e=>setForm({...form,descricao:e.target.value})}/></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Tipo *</label><select className="select" value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value as EventoTipo})}>{TIPOS.map(t=><option key={t} value={t}>{TIPO_EVENTO_LABELS[t]}</option>)}</select></div>
-                <div><label className="label">Local</label><input className="input" placeholder="Casa, trabalho..." value={form.local} onChange={e=>setForm({...form,local:e.target.value})}/></div>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Local</label>
+              <input value={form.local} onChange={e => setForm(p => ({...p, local: e.target.value}))}
+                placeholder="Onde?" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500" />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-white/50">Energia geral</span>
+                <span style={{ color: getIntensityColor(form.energia) }} className="font-bold">{form.energia}/10</span>
               </div>
-
-              {/* Energia */}
-              <div>
-                <label className="label flex items-center justify-between"><span>Energia geral</span><span style={{color:getIntensityColor(form.energia)}} className="font-bold text-sm">{form.energia}/10</span></label>
-                <input type="range" min="1" max="10" value={form.energia} onChange={e=>setForm({...form,energia:Number(e.target.value)})} className="w-full h-2 rounded-full appearance-none cursor-pointer" style={{accentColor:getIntensityColor(form.energia)}}/>
-                <div className="h-1.5 mt-1 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${(form.energia/10)*100}%`,backgroundColor:getIntensityColor(form.energia)}}/></div>
-              </div>
-
-              {/* EMOÇÕES */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Emoções</label>
-                  <button type="button" onClick={addEmocao} className="btn-ghost text-xs flex items-center gap-1 text-darwin-400"><Plus size={12}/>Adicionar emoção</button>
-                </div>
-                {emocoes.length===0&&<p className="text-xs text-zinc-600 italic">Nenhuma emoção adicionada. Clique em "+ Adicionar emoção".</p>}
-                {emocoes.map((em,i)=>(
-                  <div key={i} className="bg-[#0e0f1a] border border-[rgba(99,113,242,0.15)] rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-rose-400">Emoção {i+1}</span>
-                      <button type="button" onClick={()=>removeEmocao(i)} className="text-zinc-700 hover:text-rose-400 transition-colors"><X size={13}/></button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label">Nome da emoção</label>
-                        <select className="select" value={em.emocao_nome} onChange={e=>updateEmocao(i,"emocao_nome",e.target.value)}>
-                          <option value="">Selecione...</option>
-                          {EMOCOES_DEFAULT.map(e=><option key={e} value={e}>{e}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="label flex justify-between"><span>Intensidade</span><span style={{color:getIntensityColor(em.intensidade)}} className="font-bold">{em.intensidade}/10</span></label>
-                        <input type="range" min="1" max="10" value={em.intensidade} onChange={e=>updateEmocao(i,"intensidade",Number(e.target.value))} className="w-full cursor-pointer" style={{accentColor:getIntensityColor(em.intensidade)}}/>
-                        <div className="h-1.5 mt-1 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${(em.intensidade/10)*100}%`,backgroundColor:getIntensityColor(em.intensidade)}}/></div>
-                      </div>
-                    </div>
-                    <div><label className="label">Observação (opcional)</label><input className="input" placeholder="Contexto desta emoção..." value={em.observacao||""} onChange={e=>updateEmocao(i,"observacao",e.target.value)}/></div>
-                  </div>
-                ))}
-              </div>
-
-              {/* DOMÍNIOS */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Domínios</label>
-                  <button type="button" onClick={addDominio} className="btn-ghost text-xs flex items-center gap-1 text-violet-400"><Plus size={12}/>Adicionar domínio</button>
-                </div>
-                {dominios.length===0&&<p className="text-xs text-zinc-600 italic">Nenhum domínio adicionado. Clique em "+ Adicionar domínio".</p>}
-                {dominios.map((dm,i)=>(
-                  <div key={i} className="bg-[#0e0f1a] border border-[rgba(139,92,246,0.2)] rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-violet-400">Domínio {i+1}</span>
-                      <button type="button" onClick={()=>removeDominio(i)} className="text-zinc-700 hover:text-rose-400 transition-colors"><X size={13}/></button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label">Domínio</label>
-                        <select className="select" value={dm.dominio} onChange={e=>updateDominio(i,"dominio",e.target.value as DominioEvolutivo)}>
-                          {DOMINIOS.map(d=><option key={d} value={d}>{DOMINIO_LABELS[d]}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="label">Tipo</label>
-                        <select className="select" value={dm.tipo_nome||""} onChange={e=>updateDominio(i,"tipo_nome",e.target.value)}>
-                          <option value="">Selecione o tipo...</option>
-                          {(DOMINIO_TIPOS_DEFAULT[dm.dominio]||[]).map(t=><option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="label flex justify-between"><span>Intensidade</span><span style={{color:getIntensityColor(dm.intensidade)}} className="font-bold">{dm.intensidade}/10</span></label>
-                      <input type="range" min="1" max="10" value={dm.intensidade} onChange={e=>updateDominio(i,"intensidade",Number(e.target.value))} className="w-full cursor-pointer" style={{accentColor:getIntensityColor(dm.intensidade)}}/>
-                      <div className="h-1.5 mt-1 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${(dm.intensidade/10)*100}%`,backgroundColor:getIntensityColor(dm.intensidade)}}/></div>
-                    </div>
-                    <div><label className="label">Descrição (opcional)</label><input className="input" placeholder="Contexto deste domínio..." value={dm.descricao||""} onChange={e=>updateDominio(i,"descricao",e.target.value)}/></div>
-                  </div>
-                ))}
-              </div>
-
-              {projetos.length>0&&<div><label className="label">Projeto relacionado</label><select className="select" value={form.projeto_id} onChange={e=>setForm({...form,projeto_id:e.target.value})}><option value="">Nenhum</option>{projetos.map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>}
-
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={resetForm} className="btn-secondary flex-1">Cancelar</button>
-                <button type="submit" disabled={loading} className="btn-primary flex-1 disabled:opacity-50">{loading?"Salvando...":"Registrar evento"}</button>
-              </div>
-            </form>
+              <IntensityBar value={form.energia} color={getIntensityColor(form.energia)} />
+              <input type="range" min={1} max={10} value={form.energia}
+                onChange={e => setForm(p => ({...p, energia: parseInt(e.target.value)}))}
+                className="w-full h-1 appearance-none cursor-pointer" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-white/50 mb-1 block">Descrição</label>
+              <textarea value={form.descricao} onChange={e => setForm(p => ({...p, descricao: e.target.value}))}
+                placeholder="Descreva o contexto..." rows={3}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500 resize-none" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-white/50 mb-1 block">Tags (separadas por vírgula)</label>
+              <input value={form.tags} onChange={e => setForm(p => ({...p, tags: e.target.value}))}
+                placeholder="trabalho, pessoal, urgente..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-purple-500" />
+            </div>
           </div>
+
+          {/* Seção de Emoções */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white/80">💜 Emoções</h3>
+              <button type="button" onClick={addEmocao}
+                className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                <Plus size={12} /> Adicionar emoção
+              </button>
+            </div>
+            {emocoes.length === 0 && (
+              <p className="text-xs text-white/30 text-center py-4 border border-dashed border-white/10 rounded-xl">
+                Nenhuma emoção adicionada. Clique em &quot;Adicionar emoção&quot; para começar.
+              </p>
+            )}
+            {emocoes.map((e, i) => (
+              <EmocaoCard key={i} item={e} idx={i} onChange={changeEmocao} onRemove={removeEmocao} catalogoEmocoes={catalogoEmocoes} />
+            ))}
+          </div>
+
+          {/* Seção de Domínios */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white/80">🌐 Domínios</h3>
+              <button type="button" onClick={addDominio}
+                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                <Plus size={12} /> Adicionar domínio
+              </button>
+            </div>
+            {dominios.length === 0 && (
+              <p className="text-xs text-white/30 text-center py-4 border border-dashed border-white/10 rounded-xl">
+                Nenhum domínio adicionado. Clique em &quot;Adicionar domínio&quot; para começar.
+              </p>
+            )}
+            {dominios.map((d, i) => (
+              <DominioCard key={i} item={d} idx={i} onChange={changeDominio} onRemove={removeDominio} tiposPorDominio={tiposPorDominio} />
+            ))}
+          </div>
+
+          <button type="submit" disabled={saving}
+            className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white py-3 rounded-xl text-sm font-medium transition-colors">
+            {saving ? <><Loader2 size={16} className="animate-spin" /> Salvando...</> : 'Salvar evento'}
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin text-purple-500" size={24} /></div>
+      ) : eventos.length === 0 ? (
+        <div className="text-center py-12 text-white/30">
+          <p className="text-lg">Nenhum evento registrado</p>
+          <p className="text-sm mt-1">Clique em &quot;Novo evento&quot; para começar</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {eventos.map(ev => (
+            <div key={ev.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-medium text-sm">{ev.titulo}</span>
+                    <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">{ev.tipo}</span>
+                    {ev.energia && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: getIntensityColor(ev.energia)+'20', color: getIntensityColor(ev.energia) }}>
+                        ⚡ {ev.energia}/10
+                      </span>
+                    )}
+                  </div>
+                  {ev.descricao && <p className="text-white/50 text-xs mt-1 line-clamp-2">{ev.descricao}</p>}
+                  {ev.local && <p className="text-white/30 text-xs mt-1">📍 {ev.local}</p>}
+                  {ev.tags && ev.tags.length > 0 && (
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      {ev.tags.map(t => <span key={t} className="text-xs bg-white/5 text-white/40 px-2 py-0.5 rounded-full">#{t}</span>)}
+                    </div>
+                  )}
+                  <p className="text-white/20 text-xs mt-2">{new Date(ev.created_at).toLocaleString('pt-BR')}</p>
+                </div>
+                <button onClick={() => deleteEvento(ev.id)} className="text-white/20 hover:text-red-400 transition-colors flex-shrink-0">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
