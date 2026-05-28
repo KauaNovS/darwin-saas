@@ -1,27 +1,28 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, ArrowRight } from 'lucide-react';
+import { ArrowRight, Plus } from 'lucide-react';
 
-const CAT: Record<string,{emoji:string;color:string;bg:string;label:string}> = {
-  emocao:       { emoji:'💜', color:'#7b61ff', bg:'rgba(123,97,255,0.12)', label:'Emoção' },
-  pensamento:   { emoji:'🧠', color:'#38bdf8', bg:'rgba(56,189,248,0.12)', label:'Pensamento' },
-  sensacao:     { emoji:'🌊', color:'#fb923c', bg:'rgba(251,146,60,0.12)', label:'Sensação' },
-  comportamento:{ emoji:'🔄', color:'#ef4444', bg:'rgba(239,68,68,0.12)',  label:'Comportamento' },
-  evento:       { emoji:'📌', color:'#f472b6', bg:'rgba(244,114,182,0.12)',label:'Evento' },
-  atividade:    { emoji:'⚡', color:'#2dd4bf', bg:'rgba(45,212,191,0.12)', label:'Atividade' },
-  sono:         { emoji:'🌙', color:'#818cf8', bg:'rgba(129,140,248,0.12)',label:'Sono' },
-  memoria:      { emoji:'🕰️', color:'#f9a8d4', bg:'rgba(249,168,212,0.12)',label:'Memória' },
+const CAT_META: Record<string,{ emoji:string; label:string; color:string }> = {
+  emocao:        { emoji:'💜', label:'Emoção',        color:'#7b61ff' },
+  pensamento:    { emoji:'🧠', label:'Pensamento',    color:'#38bdf8' },
+  comportamento: { emoji:'🔄', label:'Comportamento', color:'#ef4444' },
+  evento:        { emoji:'📌', label:'Evento',        color:'#f472b6' },
+  atividade:     { emoji:'⚡', label:'Atividade',     color:'#2dd4bf' },
+  sono:          { emoji:'🌙', label:'Sono',          color:'#818cf8' },
+  memoria:       { emoji:'🕰️', label:'Memória',      color:'#f9a8d4' },
+  sensacao:      { emoji:'🌊', label:'Sensação',      color:'#fb923c' },
 };
 
-function fmtTime(d: string) {
-  const diff = Date.now() - new Date(d).getTime();
-  const m = Math.floor(diff/60000);
+function fmtTime(dateStr: string) {
+  const d = new Date(dateStr);
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
   if (m < 1) return 'agora';
-  if (m < 60) return m+'min';
-  const h = Math.floor(m/60);
-  if (h < 24) return h+'h atrás';
-  return new Date(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  if (m < 60) return m + 'min';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h';
+  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
 }
 
 export default async function DashboardPage() {
@@ -32,47 +33,68 @@ export default async function DashboardPage() {
   const { data: registros } = await supabase
     .from('registros').select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending:false })
-    .limit(20);
+    .order('created_at', { ascending: false })
+    .limit(8);
 
-  const regs = registros || [];
   const hora = new Date().getHours();
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = user.email?.split('@')[0] || 'você';
-
-  const countByTipo = regs.reduce((acc: Record<string,number>, r) => {
-    acc[r.categoria as string] = (acc[r.categoria as string] || 0) + 1;
-    return acc;
-  }, {});
+  const regs = registros || [];
 
   return (
-    <div className='space-y-10'>
-      <div className='pt-2'>
-        <p className='text-sm' style={{ color:'var(--text3)' }}>{saudacao}</p>
-        <h1 className='text-3xl font-black mt-0.5' style={{ color:'var(--text)' }}>{nome}</h1>
+    <div style={{ maxWidth: 480, margin: '0 auto', paddingTop: 48, paddingBottom: 48 }}>
+
+      {/* Greeting */}
+      <div style={{ marginBottom: 48 }}>
+        <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 4 }}>{saudacao},</p>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>{nome}</h1>
       </div>
 
-      <Link href='/registrar'
-        className='flex items-center justify-center gap-3 py-5 rounded-2xl text-base font-bold transition-all hover:scale-[1.02] active:scale-[0.98]'
-        style={{ background:'var(--accent)', color:'#fff', boxShadow:'0 8px 30px rgba(123,97,255,0.4)', display:'flex' }}>
-        <Plus size={20} />
-        Registrar agora
+      {/* Botão principal de registro */}
+      <Link href="/dashboard/registrar"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '20px 24px', borderRadius: 18, background: 'var(--text)', color: 'var(--bg)', textDecoration: 'none', marginBottom: 48, transition: 'opacity 0.15s' }}
+        onMouseEnter={undefined}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Plus size={18} />
+          </div>
+          <div>
+            <p style={{ fontSize: 15, fontWeight: 700 }}>Novo registro</p>
+            <p style={{ fontSize: 12, opacity: 0.6, marginTop: 1 }}>Emoção, pensamento, evento...</p>
+          </div>
+        </div>
+        <ArrowRight size={18} style={{ opacity: 0.5 }} />
       </Link>
 
+      {/* Últimos registros */}
       {regs.length > 0 && (
         <div>
-          <p className='text-xs font-bold uppercase tracking-widest mb-4' style={{ color:'var(--text3)' }}>
-            Hoje
-          </p>
-          <div className='flex flex-wrap gap-2'>
-            {Object.entries(countByTipo).map(([tipo, count]) => {
-              const c = CAT[tipo]; if (!c) return null;
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Recentes</p>
+            <Link href="/dashboard/eventos" style={{ fontSize: 12, color: 'var(--text3)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+              Ver todos <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {regs.map((reg: Record<string,unknown>) => {
+              const cat = CAT_META[reg.categoria as string] || CAT_META.emocao;
+              const meta = (reg.meta as Record<string,unknown>) || {};
+              const sels = (meta.sels as string[]) || [];
+              const titulo = (reg.titulo as string) || sels[0] || cat.label;
               return (
-                <div key={tipo} className='flex items-center gap-2 px-3 py-2 rounded-xl'
-                  style={{ background:c.bg, border:`1px solid ${c.color}30` }}>
-                  <span>{c.emoji}</span>
-                  <span className='text-sm font-bold' style={{ color:c.color }}>{count}</span>
-                  <span className='text-xs' style={{ color:c.color+'99' }}>{c.label}</span>
+                <div key={reg.id as string}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>{cat.emoji}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titulo}</p>
+                    {sels.length > 1 && (
+                      <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{sels.slice(1,3).join(', ')}{sels.length > 3 ? ' +' + (sels.length-3) : ''}</p>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    {(reg.intensidade as number) && <p style={{ fontSize: 13, fontWeight: 700, color: (reg.intensidade as number) <= 3 ? '#ef4444' : (reg.intensidade as number) <= 6 ? '#f59e0b' : '#22c55e' }}>{reg.intensidade as number}</p>}
+                    <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{fmtTime(reg.created_at as string)}</p>
+                  </div>
                 </div>
               );
             })}
@@ -80,56 +102,14 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div>
-        <div className='flex items-center justify-between mb-4'>
-          <p className='text-xs font-bold uppercase tracking-widest' style={{ color:'var(--text3)' }}>Registros</p>
-          {regs.length > 5 && (
-            <Link href='/dashboard/eventos' className='flex items-center gap-1 text-xs' style={{ color:'var(--text3)' }}>
-              Ver todos <ArrowRight size={11} />
-            </Link>
-          )}
+      {regs.length === 0 && (
+        <div style={{ textAlign: 'center', paddingTop: 60 }}>
+          <p style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.7 }}>
+            Nenhum registro ainda.<br />
+            Clique em <strong style={{ color: 'var(--text2)' }}>Novo registro</strong> para começar.
+          </p>
         </div>
-
-        {regs.length === 0 ? (
-          <div className='text-center py-16 space-y-3'>
-            <p className='text-4xl'>🌱</p>
-            <p className='font-semibold' style={{ color:'var(--text2)' }}>Nenhum registro ainda</p>
-            <p className='text-sm' style={{ color:'var(--text3)' }}>Toque em Registrar agora para começar</p>
-          </div>
-        ) : (
-          <div className='space-y-2'>
-            {regs.slice(0,10).map((reg) => {
-              const cat = CAT[reg.categoria as string] || CAT.emocao;
-              const itens = ((reg.meta as Record<string,unknown>)?.itens as string[]) || [];
-              const iv = reg.intensidade as number;
-              const intColor = iv <= 3 ? '#ef4444' : iv <= 6 ? '#f59e0b' : '#22c55e';
-              return (
-                <div key={reg.id as string}
-                  className='flex items-center gap-4 p-4 rounded-2xl'
-                  style={{ background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)' }}>
-                  <div className='w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0' style={{ background:cat.bg }}>
-                    {cat.emoji}
-                  </div>
-                  <div className='flex-1 min-w-0'>
-                    <p className='font-semibold truncate' style={{ color:'var(--text)' }}>
-                      {itens.length > 0 ? itens.slice(0,2).join(' · ') : (reg.titulo as string) || cat.label}
-                    </p>
-                    <p className='text-xs mt-0.5' style={{ color:cat.color }}>
-                      {cat.label}
-                      {(reg.adaptativo as boolean) === true && ' · ↑ adaptativo'}
-                      {(reg.adaptativo as boolean) === false && ' · ↓ desadaptativo'}
-                    </p>
-                  </div>
-                  <div className='flex flex-col items-end gap-1 flex-shrink-0'>
-                    {iv && <span className='text-sm font-black' style={{ color:intColor }}>{iv}</span>}
-                    <span className='text-xs' style={{ color:'var(--text3)' }}>{fmtTime(reg.created_at as string)}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
